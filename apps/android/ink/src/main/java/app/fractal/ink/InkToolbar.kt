@@ -80,12 +80,13 @@ private fun toolLabel(item: InkTool): Int = when (item) {
 private fun eraserLabel(mode: EraserMode): Int =
     if (mode == EraserMode.Stroke) R.string.eraser_stroke else R.string.eraser_partial
 private fun shapeLabel(shape: ShapeMode): Int = when (shape) {
+    ShapeMode.Auto -> R.string.shape_auto
     ShapeMode.Line -> R.string.shape_line
     ShapeMode.Arrow -> R.string.shape_arrow
     ShapeMode.Rectangle -> R.string.shape_rectangle
     ShapeMode.Ellipse -> R.string.shape_ellipse
 }
-private fun icon(name: InkTool): ImageVector = ImageVector.Builder(name = name.name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
+private fun icon(name: InkTool, shape: ShapeMode): ImageVector = ImageVector.Builder(name = name.name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
     path(fill = null, stroke = androidx.compose.ui.graphics.SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round) {
         when (name) {
             InkTool.Ballpoint -> { moveTo(5f,19f); lineTo(18f,6f); lineTo(20f,8f); lineTo(7f,21f); close(); moveTo(15f,9f); lineTo(17f,11f) }
@@ -93,7 +94,13 @@ private fun icon(name: InkTool): ImageVector = ImageVector.Builder(name = name.n
             InkTool.Pencil -> { moveTo(4f,19f); lineTo(17f,5f); lineTo(20f,8f); lineTo(7f,21f); close(); moveTo(5f,17f); lineTo(8f,20f) }
             InkTool.Highlighter -> { moveTo(4f,17f); lineTo(15f,6f); lineTo(20f,11f); lineTo(9f,22f); close(); moveTo(3f,22f); lineTo(19f,22f) }
             InkTool.Eraser -> { moveTo(3f,16f); lineTo(14f,5f); lineTo(21f,12f); lineTo(12f,21f); lineTo(8f,21f); close(); moveTo(8f,11f); lineTo(15f,18f) }
-            InkTool.Shape -> { moveTo(3f,19f); lineTo(12f,5f); lineTo(21f,19f); close() }
+            InkTool.Shape -> when (shape) {
+                ShapeMode.Auto -> { moveTo(3f,19f); lineTo(12f,5f); lineTo(21f,19f); close(); moveTo(18f,3f); lineTo(18f,9f); moveTo(15f,6f); lineTo(21f,6f) }
+                ShapeMode.Line -> { moveTo(4f,20f); lineTo(20f,4f) }
+                ShapeMode.Arrow -> { moveTo(4f,20f); lineTo(20f,4f); lineTo(12f,4f); moveTo(20f,4f); lineTo(20f,12f) }
+                ShapeMode.Rectangle -> { moveTo(4f,5f); lineTo(20f,5f); lineTo(20f,19f); lineTo(4f,19f); close() }
+                ShapeMode.Ellipse -> { moveTo(20f,12f); curveTo(20f,2f,4f,2f,4f,12f); curveTo(4f,22f,20f,22f,20f,12f); close() }
+            }
             InkTool.Lasso -> { moveTo(5f,9f); curveTo(6f,3f,19f,3f,20f,10f); curveTo(21f,18f,8f,20f,5f,15f); curveTo(3f,12f,6f,10f,9f,12f); lineTo(12f,18f) }
         }
     }
@@ -116,7 +123,7 @@ fun InkToolbar(state: InkPageState, tool: InkToolState, modifier: Modifier = Mod
     var collapsed by remember { mutableStateOf(false) }
     val body: @Composable (Boolean) -> Unit = { vertical ->
         @Composable fun ToolButton(item: InkTool) {
-            val label = stringResource(toolLabel(item))
+            val label = stringResource(toolLabel(item)) + if (item == InkTool.Shape) " · " + stringResource(shapeLabel(tool.shapeMode)) else ""
             val interaction = remember { MutableInteractionSource() }
             val hovered by interaction.collectIsHoveredAsState()
             var pressedLabel by remember { mutableStateOf(false) }
@@ -125,12 +132,13 @@ fun InkToolbar(state: InkPageState, tool: InkToolState, modifier: Modifier = Mod
                 Box(
                     Modifier.size(48.dp).hoverable(interaction).combinedClickable(interactionSource = interaction, indication = null,
                         onLongClick = { pressedLabel = true }) {
-                        if (tool.active == item) popover = item else { tool.active = item; popover = null }
+                        if (tool.active == item || item == InkTool.Shape) popover = item else popover = null
+                        tool.active = item
                         onToolSelected(item)
                     }.semantics { contentDescription = label; selected = tool.active == item },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon(item), null, tint = colors.ink, modifier = Modifier.size(24.dp))
+                    Icon(icon(item, tool.shapeMode), null, tint = colors.ink, modifier = Modifier.size(24.dp))
                     Canvas(Modifier.align(if (vertical) Alignment.CenterStart else Alignment.BottomCenter)
                         .then(if (vertical) Modifier.width(2.dp).height(24.dp) else Modifier.width(24.dp).height(2.dp))) {
                         if (tool.active == item) drawRect(colors.ink)

@@ -71,6 +71,7 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
     var status by remember(paper.paperKey) { mutableStateOf(app.getString(R.string.loading_pdf)) }
     var sourcePageContext by remember(paper.paperKey) { mutableStateOf<Map<Int, String>>(emptyMap()) }
     var blocks by remember(paper.paperKey) { mutableStateOf<List<TranslatedBlock>>(emptyList()) }
+    val translatedPageIndices = remember(blocks) { blocks.indices.groupBy { blocks[it].page } }
     var mode by remember(paper.paperKey) { mutableStateOf("original") }
     var driver by remember { mutableStateOf("original") }
     var sourceAnchor by remember(paper.paperKey) { mutableStateOf(ReadingAnchor()) }
@@ -125,6 +126,8 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
         answerTargets[thread] = ReaderAnswerTarget(selected ?: (sourceAnchor.page to PdfTextSelection("", listOf(PdfRect(.02f, .2f, .01f, .01f)))), explain = explain, requestId = requestId, threadId = thread)
         panel = false
     }
+    var pageDialog by remember { mutableStateOf(false) }
+    var pageInput by remember { mutableStateOf("") }
     var fullTitle by remember { mutableStateOf(false) }
     LaunchedEffect(paper.paperKey) {
         app.database.metadata().snapshot(paper.paperKey)?.let {
@@ -286,6 +289,9 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
                     Row(Modifier.fillMaxWidth().height(headerRow), verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { savePosition(); onBack() }) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
                         Text(paper.title ?: paper.paperKey, Modifier.weight(1f).heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).clickable { fullTitle = true }, style = MaterialTheme.typography.titleMedium.copy(fontFamily = ScholarlySerif), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        TextButton(enabled = pages != null, onClick = { pageInput = activePage.toString(); pageDialog = true }) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.reader_page_count, activePage, pages?.pageCount ?: paper.pageCount ?: 0))
+                        }
                         TextButton(onClick = { panelTab = "notes"; panel = true }) { Text(libraryText("Notes", "노트")) }
                         TextButton(onClick = { openAnswer(selection) }) { Text(libraryText("Ask", "질문")) }
                     }
@@ -327,8 +333,9 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
                     Row(Modifier.fillMaxSize()) {
                         if (sourceVisible) {
                             val source = pages
-                            if (source == null) Text(status, Modifier.weight(1f).padding(24.dp)) else LazyColumn(state = sourceList,
-                                modifier = Modifier.weight(1f).fillMaxHeight().testTag("reader-source-pages").background(colors.sunken).readerViewport { if (viewport != it) viewport = it }.clipToBounds().graphicsLayer {
+                            if (source == null) Text(status, Modifier.weight(1f).padding(24.dp)) else Box(Modifier.weight(1f).fillMaxHeight()) {
+                            LazyColumn(state = sourceList,
+                                modifier = Modifier.fillMaxSize().testTag("reader-source-pages").background(colors.sunken).readerViewport { if (viewport != it) viewport = it }.clipToBounds().graphicsLayer {
                                     transformOrigin = TransformOrigin(0f, 0f)
                                     scaleX = pinch.scale; scaleY = pinch.scale
                                     translationX = pinch.x
@@ -387,12 +394,19 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
                                         })
                                 }
                             }
+                            ReaderPageScrollbar(sourceList, source.pageCount, Modifier.align(Alignment.CenterEnd),
+                                position = { pageScrollPosition(sourceList.firstVisibleItemIndex, sourceList.fraction(), source.pageCount) },
+                                onPage = { page ->
+                                    driver = "original"; scope.launch { sourceList.scrollToItem(page) }
+                                })
+                            }
                         }
                         if (split) VerticalDivider(color = colors.rule)
                         if ((translationOnly || split) && translationGapPage != null) Column(Modifier.weight(1f).fillMaxHeight().padding(24.dp)) {
                             Text(libraryText("No translated content is cached for page $translationGapPage.", "$translationGapPage 쪽의 번역 내용이 캐시되지 않았습니다."), style = MaterialTheme.typography.bodyLarge)
                             TextButton(onClick = { translationToSource(translatedAnchor); mode = "original"; driver = "original" }) { Text(libraryText("Read original page", "원문 페이지 읽기")) }
-                        } else if (translationOnly || split) LazyColumn(state = translationList, modifier = Modifier.weight(1f).fillMaxHeight().readingDriver { driver = "translation" }) {
+                        } else if (translationOnly || split) Box(Modifier.weight(1f).fillMaxHeight()) {
+                        LazyColumn(state = translationList, modifier = Modifier.fillMaxSize().readingDriver { driver = "translation" }) {
                             itemsIndexed(blocks, key = { _, block -> block.blockId }) { index, block ->
                                 Column {
                                     if (index == 0 || blocks[index - 1].page != block.page) {
@@ -407,6 +421,19 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
                                     }
                                 }
                             }
+                        }
+                        ReaderPageScrollbar(translationList, pages?.pageCount ?: paper.pageCount ?: 0, Modifier.align(Alignment.CenterEnd),
+                            position = {
+                                val index = translationList.firstVisibleItemIndex
+                                val page = blocks.getOrNull(index)?.page ?: 1
+                                val indices = translatedPageIndices[page].orEmpty()
+                                val fraction = (indices.indexOf(index).coerceAtLeast(0) + translationList.fraction()) / indices.size.coerceAtLeast(1)
+                                pageScrollPosition(page - 1, fraction, pages?.pageCount ?: paper.pageCount ?: 0)
+                            },
+                            onPage = { page ->
+                                val index = blocks.indexOfFirst { it.page == page + 1 }
+                                if (index >= 0) { driver = "translation"; scope.launch { translationList.scrollToItem(index) } }
+                            })
                         }
                     }
                     if (selectionMessage.isNotBlank()) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().nativeInkBlocker(), color = colors.paper) {
@@ -445,6 +472,27 @@ internal fun StableReaderScreen(app: ReaderApplication, paper: LibraryEntity, on
     noteSelection?.let { (page, selected) -> NoteEditor(null, selected.text, onDismiss = { noteSelection = null }) { text, color ->
         scope.launch { saveMemo(app, paper.paperKey, page, selected, text, color) }; noteSelection = null
     } }
+    if (pageDialog) {
+        fun confirmPage() {
+            pageJumpIndex(pageInput, pages?.pageCount ?: 0)?.let { index ->
+                scope.launch {
+                    sourceList.scrollToItem(index)
+                    val translated = blocks.indexOfFirst { it.page == index + 1 }
+                    if (translated >= 0) { translationGapPage = null; translationList.scrollToItem(translated) }
+                }
+            }
+            pageDialog = false
+        }
+        AlertDialog(onDismissRequest = { pageDialog = false },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.reader_jump_page)) },
+            text = { OutlinedTextField(pageInput, { pageInput = it }, singleLine = true,
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.reader_page_number)) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Go),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { confirmPage() })) },
+            confirmButton = { TextButton(onClick = { confirmPage() }) { Text(androidx.compose.ui.res.stringResource(R.string.reader_jump_page)) } },
+            dismissButton = { TextButton(onClick = { pageDialog = false }) { Text(androidx.compose.ui.res.stringResource(R.string.reader_cancel)) } })
+    }
     if (fullTitle) AlertDialog(onDismissRequest = { fullTitle = false }, title = { Text(libraryText("Paper details", "논문 정보")) },
         text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(paper.title ?: paper.paperKey, style = MaterialTheme.typography.titleLarge); Text(paper.authors); Text(listOfNotNull(paper.venue, paper.year?.toString()).joinToString(" · ")); Text(paper.paperKey, style = MaterialTheme.typography.bodySmall) } },
         confirmButton = { TextButton(onClick = { fullTitle = false }) { Text(libraryText("Close", "닫기")) } })

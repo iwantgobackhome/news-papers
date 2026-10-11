@@ -36,7 +36,7 @@ fun rememberInkToolState(): InkToolState {
         state.loadWidths(initial[WIDTHS] ?: "")
         state.eraserMode = runCatching { EraserMode.valueOf(initial[ERASER] ?: "") }.getOrDefault(EraserMode.Stroke)
         state.buttonEraserMode = runCatching { EraserMode.valueOf(initial[BUTTON] ?: "") }.getOrDefault(EraserMode.Stroke)
-        state.shapeMode = runCatching { ShapeMode.valueOf(initial[SHAPE] ?: "") }.getOrDefault(ShapeMode.Line)
+        state.shapeMode = runCatching { ShapeMode.valueOf(initial[SHAPE] ?: "") }.getOrDefault(ShapeMode.Auto)
         state.recentColors = initial[RECENTS]?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
         snapshotFlow { listOf(state.active.name,state.colorsString(),state.widthsString(),state.eraserMode.name,state.buttonEraserMode.name,state.shapeMode.name,state.recentColors.joinToString(",")) }
             .distinctUntilChanged().collect { values ->

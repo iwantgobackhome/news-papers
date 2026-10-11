@@ -193,7 +193,7 @@ private fun InkStroke.edited(
 
 enum class InkTool { Ballpoint, Fountain, Pencil, Highlighter, Eraser, Shape, Lasso }
 enum class EraserMode { Stroke, Partial }
-enum class ShapeMode { Line, Arrow, Rectangle, Ellipse }
+enum class ShapeMode { Auto, Line, Arrow, Rectangle, Ellipse }
 class InkToolState {
     var active by mutableStateOf(InkTool.Ballpoint)
     private val colors = mutableStateMapOf<InkTool,String>()
@@ -230,7 +230,7 @@ class InkToolState {
     }
     var eraserMode by mutableStateOf(EraserMode.Stroke)
     var buttonEraserMode by mutableStateOf(EraserMode.Stroke)
-    var shapeMode by mutableStateOf(ShapeMode.Line)
+    var shapeMode by mutableStateOf(ShapeMode.Auto)
     var recentColors by mutableStateOf<List<String>>(emptyList())
     fun chooseColor(value: String) { color = value; recentColors = (listOf(value) + recentColors.filterNot { it == value }).take(5) }
 }

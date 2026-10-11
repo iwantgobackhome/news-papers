@@ -17,7 +17,7 @@ export function PageScrollPane({ bodyRef, onScroll, onScrollbarPage, pageCount, 
   useLanguage();
   const railRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointer: number; offset: number } | null>(null);
-  const [metrics, setMetrics] = useState({ viewport: 0, content: 0, top: 0, track: 0 });
+  const [metrics, setMetrics] = useState({ viewport: 0, content: 0, top: 0, track: 0, page: 1 });
   const [preview, setPreview] = useState<{ page: number; y: number } | null>(null);
   const pages = (): PageBox[] => {
     const body = bodyRef.current;
@@ -37,7 +37,14 @@ export function PageScrollPane({ bodyRef, onScroll, onScrollbarPage, pageCount, 
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const next = { viewport: body.clientHeight, content: body.scrollHeight, top: body.scrollTop, track: rail.clientHeight };
+        // The current page is resolved once per frame here, not on every render.
+        const next = {
+          viewport: body.clientHeight,
+          content: body.scrollHeight,
+          top: body.scrollTop,
+          track: rail.clientHeight,
+          page: pageForScroll(body.scrollTop, pages(), Math.max(0, body.scrollHeight - body.clientHeight)),
+        };
         setMetrics((old) => (Object.keys(next).every((key) => old[key as keyof typeof old] === next[key as keyof typeof next]) ? old : next));
       });
     };
@@ -98,8 +105,8 @@ export function PageScrollPane({ bodyRef, onScroll, onScrollbarPage, pageCount, 
         aria-orientation="vertical"
         aria-valuemin={1}
         aria-valuemax={Math.max(1, pageCount)}
-        aria-valuenow={pageForScroll(metrics.top, pages(), maxScroll)}
-        aria-valuetext={`${pageForScroll(metrics.top, pages(), maxScroll)} / ${pageCount}`}
+        aria-valuenow={metrics.page}
+        aria-valuetext={`${metrics.page} / ${pageCount}`}
         onPointerDown={(event) => {
           if (event.button !== 0 || maxScroll <= 0) return;
           event.preventDefault();

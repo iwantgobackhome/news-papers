@@ -32,12 +32,13 @@ function pdf(): Buffer {
   ].join('\n');
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Pages /Kids [3 0 R ${Array.from({ length: 11 }, (_, index) => `${index + 7} 0 R`).join(' ')}] /Count 12 >>`,
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
     `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     `<< /Title (${title}) >>`,
   ];
+  for (let page = 2; page <= 12; page++) objects.push(objects[2]);
   let content = '%PDF-1.4\n';
   const offsets = [0];
   for (const [index, object] of objects.entries()) {
@@ -189,9 +190,129 @@ async function main(): Promise<void> {
       console.error('Reader page:', (await page.locator('body').innerText()).slice(0, 1200));
       throw error;
     });
-    await page.locator('.textLayer span').filter({ hasText: 'A readable line' }).waitFor();
+    await page.locator('.pdf-page[data-page="1"] .textLayer span').filter({ hasText: 'A readable line' }).waitFor();
     assert.ok((await canvas.evaluate((element) => (element as HTMLCanvasElement).width)) > 0);
     console.log('PASS reader draws page 1');
+
+    const pageInput = page.locator('.reader-bar__page-input');
+    await pageInput.fill('10');
+    await pageInput.press('Enter');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '10');
+    await page.locator('.pdf-page[data-page="10"] canvas').waitFor();
+    assert.equal(await page.locator('.pdf-page[data-page="1"] canvas').count(), 0);
+    console.log('PASS editable page number jumps to page 10 and updates virtualized canvases');
+    await pageInput.fill('2');
+    await pageInput.blur();
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '2');
+    await pageInput.fill('8');
+    await pageInput.press('Escape');
+    assert.equal(await pageInput.inputValue(), '2');
+    await pageInput.fill('not a page');
+    await pageInput.press('Enter');
+    assert.equal(await pageInput.inputValue(), '2');
+    await pageInput.fill('999');
+    await pageInput.press('Enter');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '12');
+    console.log('PASS page blur commits, Escape cancels, invalid input is ignored, and page numbers clamp');
+    await pageInput.fill('1');
+    await pageInput.press('Enter');
+    const rail = page.locator('.page-scrollbar').first();
+    const thumb = page.getByTestId('pdf-body-thumb');
+    await page.waitForFunction(() => Number(document.querySelector('#pdf-body')?.scrollTop) < 20);
+    const railBox = await rail.boundingBox();
+    const thumbBox = await thumb.boundingBox();
+    assert.ok(railBox && thumbBox);
+    await page.mouse.move(thumbBox.x + thumbBox.width / 2, thumbBox.y + thumbBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(thumbBox.x + thumbBox.width / 2, railBox.y + railBox.height * 0.7, { steps: 12 });
+    await rail.getByRole('tooltip').waitFor();
+    assert.match(await rail.getByRole('tooltip').innerText(), /\d+ \/ 12/);
+    await page.mouse.up();
+    await page.waitForFunction(() => Number((document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value) > 5);
+    const draggedPage = Number(await pageInput.inputValue());
+    await page.locator(`.pdf-page[data-page="${draggedPage}"] canvas`).waitFor();
+    console.log('PASS scrollbar thumb drag changes current page and mounts its canvas');
+    await rail.focus();
+    await rail.press('Home');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '1');
+    await page.locator('.pdf-page[data-page="1"] canvas').waitFor();
+    console.log('PASS scrollbar keyboard Home returns to page 1');
+    await rail.press('End');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '12');
+    await page.waitForFunction(() => {
+      const body = document.querySelector('#pdf-body')!;
+      return body.scrollTop >= body.scrollHeight - body.clientHeight - 1;
+    });
+    assert.equal(await pageInput.inputValue(), '12');
+    console.log('PASS scrollbar End reaches the final page at the bottom');
+
+    await page.locator('.reader-bar__views').getByRole('button', { name: '번역', exact: true }).click();
+    const translatedRail = page
+      .locator('.page-scroll-pane')
+      .filter({ has: page.getByTestId('korean-body') })
+      .getByRole('scrollbar');
+    await translatedRail.waitFor();
+    // Switching panes fits the page width after the reader's 60ms layout debounce.
+    await page.waitForTimeout(150);
+    await translatedRail.focus();
+    await translatedRail.press('Home');
+    await translatedRail.press('ArrowDown');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '2');
+    await translatedRail.press('End');
+    await page.waitForFunction(() => (document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value === '12');
+    console.log('PASS structured translation scrollbar navigates independently');
+    await page.locator('.reader-bar__views').getByRole('button', { name: '원문', exact: true }).click();
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.waitForTimeout(150);
+    await rail.focus();
+    await rail.press('Home');
+    const pointerSession = await page.context().newCDPSession(page);
+    const tabletRail = await rail.boundingBox();
+    const tabletThumb = await thumb.boundingBox();
+    assert.ok(tabletRail && tabletThumb);
+    const touchX = tabletThumb.x + tabletThumb.width / 2;
+    const touchY = tabletThumb.y + tabletThumb.height / 2;
+    await pointerSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchX, y: touchY }] });
+    await pointerSession.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchX, y: tabletRail.y + tabletRail.height * 0.6 }] });
+    await pointerSession.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+    await page.waitForFunction(() => Number((document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value) > 3);
+    await rail.focus();
+    await rail.press('Home');
+    await page.waitForFunction(() => document.querySelector('#pdf-body')?.scrollTop === 0);
+    const penThumb = await thumb.boundingBox();
+    assert.ok(penThumb);
+    await pointerSession.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      pointerType: 'pen',
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+      x: touchX,
+      y: penThumb.y + penThumb.height / 2,
+    });
+    await pointerSession.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      pointerType: 'pen',
+      buttons: 1,
+      x: touchX,
+      y: tabletRail.y + tabletRail.height * 0.6,
+    });
+    await pointerSession.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      pointerType: 'pen',
+      button: 'left',
+      buttons: 0,
+      clickCount: 1,
+      x: touchX,
+      y: tabletRail.y + tabletRail.height * 0.6,
+    });
+    await page.waitForFunction(() => Number((document.querySelector('.reader-bar__page-input') as HTMLInputElement)?.value) > 3);
+    await pointerSession.detach();
+    console.log('PASS tablet-width touch and pen navigation, including touch cancellation');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(150);
+    await rail.press('Home');
+    await page.locator('.pdf-page[data-page="1"] canvas').waitFor();
 
     async function selectText(text = 'A readable line') {
       const span = page.locator('.textLayer span').filter({ hasText: text }).first();

@@ -865,6 +865,9 @@ export function App(): JSX.Element {
     (pane: Pane) => {
       const body = pane === 'source' ? pdfBody.current : textBody.current;
       if (body === null) return currentPage;
+      // A short final page cannot reach the pane's top; the bottom still means the last page.
+      const maxScroll = body.scrollHeight - body.clientHeight;
+      if (maxScroll > 0 && body.scrollTop >= maxScroll - 1) return pageCount;
       let page = 1;
       for (const [candidate, node] of paneNodes(pane)) {
         const top = scrollTopForDescendant(node.getBoundingClientRect().top, body.getBoundingClientRect().top, body.scrollTop);
@@ -872,7 +875,7 @@ export function App(): JSX.Element {
       }
       return page;
     },
-    [currentPage, paneNodes],
+    [currentPage, pageCount, paneNodes],
   );
 
   /** A Korean page's top as laid out now; the measured-height estimate only when it is not in
@@ -1994,6 +1997,12 @@ export function App(): JSX.Element {
                   registerPage={registerPage}
                   bodyRef={pdfBody}
                   onScroll={onPdfScroll}
+                  onScrollbarPage={(page) => {
+                    aligned.current = true;
+                    link.current.suppressed = null;
+                    link.current.leader = 'source';
+                    setCurrentPage(page);
+                  }}
                   onSelectBlock={selectSourceBlock}
                   onSelectText={setPendingSelection}
                   pending={pendingSelection}
@@ -2079,6 +2088,12 @@ export function App(): JSX.Element {
                     onPageHeight={recordKoreanHeight}
                     bodyRef={textBody}
                     onScroll={onTextScroll}
+                    onScrollbarPage={(page) => {
+                      aligned.current = true;
+                      link.current.suppressed = null;
+                      link.current.leader = 'translation';
+                      setCurrentPage(page);
+                    }}
                     onAdjustScroll={onKoreanAdjustScroll}
                     onSelectBlock={selectKoreanBlock}
                   />

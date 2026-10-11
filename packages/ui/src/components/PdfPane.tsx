@@ -1,3 +1,4 @@
+import { PageScrollPane } from '../reader/PageScrollPane';
 import { t } from '../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { TextLayer } from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -417,6 +418,7 @@ export interface PdfPaneProps {
   registerPage(page: number, element: HTMLDivElement | null): void;
   bodyRef: React.RefObject<HTMLDivElement | null>;
   onScroll(): void;
+  onScrollbarPage(page: number): void;
   onSelectBlock(block: Block): void;
   onSelectText(selection: PendingSelection): void;
   onOpenHighlight(highlight: Highlight): void;
@@ -656,7 +658,7 @@ export function PdfPages(props: PdfPaneProps): JSX.Element {
                   : 'Select text'}
         </span>
       </div>
-      <div className="pane-body" ref={bodyRef} onScroll={onScroll} data-testid="pdf-body">
+      <PageScrollPane bodyRef={bodyRef} onScroll={onScroll} onScrollbarPage={props.onScrollbarPage} pageCount={pageCount} testId="pdf-body">
         {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) =>
           live.has(page) ? (
             <PageView
@@ -696,7 +698,7 @@ export function PdfPages(props: PdfPaneProps): JSX.Element {
             </div>
           ),
         )}
-      </div>
+      </PageScrollPane>
     </>
   );
 }

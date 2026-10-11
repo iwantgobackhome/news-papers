@@ -253,6 +253,7 @@ export const ko = {
     leaderTranslation: '번역을 따라 이동 중',
     toolbar: '읽기 도구',
     pages: '쪽 이동',
+    pageNumber: '이동할 쪽 번호',
     prevPage: '이전 쪽',
     nextPage: '다음 쪽',
     zoom: '확대',

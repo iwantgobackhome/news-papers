@@ -1,3 +1,4 @@
+import { PageScrollPane } from '../reader/PageScrollPane';
 import { t, useLanguage } from '../i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { Block, Translation } from '@fractal/shared';
@@ -318,6 +319,7 @@ export interface KoreanPaneProps {
   onPageHeight(page: number, heightPx: number): void;
   bodyRef: React.RefObject<HTMLDivElement | null>;
   onScroll(): void;
+  onScrollbarPage(page: number): void;
   /** Called just before the pane shifts its own scroll position to keep the reader's place. */
   onAdjustScroll?(): void;
   onSelectBlock(block: Block, via: SelectVia): void;
@@ -392,7 +394,7 @@ export function KoreanPages(props: KoreanPaneProps): JSX.Element {
   }
 
   return (
-    <div className="pane-body" ref={bodyRef} onScroll={onScroll} data-testid="korean-body">
+    <PageScrollPane bodyRef={bodyRef} onScroll={onScroll} onScrollbarPage={props.onScrollbarPage} pageCount={pageCount} testId="korean-body">
       {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) =>
         live.has(page) ? (
           <KoreanPageView
@@ -415,7 +417,7 @@ export function KoreanPages(props: KoreanPaneProps): JSX.Element {
           </div>
         ),
       )}
-    </div>
+    </PageScrollPane>
   );
 }
 

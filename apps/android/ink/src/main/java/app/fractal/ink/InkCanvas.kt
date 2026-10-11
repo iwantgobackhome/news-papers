@@ -168,7 +168,7 @@ private class InkSurface(
     private var gestureEraser = EraserMode.Stroke
     private var gestureColor = "#1C1B19"
     private var gestureWidth = .003f
-    private var gestureShape = ShapeMode.Line
+    private var gestureShape = ShapeMode.Auto
     // Kept until the entire stream ends, including any palm remaining after pen-up.
     private var penOwnsStream = false
     private var pinchOwnsStream = false
@@ -493,7 +493,7 @@ private class InkSurface(
                 if (selectionStart != null) dry.preview = state.selection()
             } else if (gestureTool == InkTool.Shape) {
                 dry.shapeColor = gestureColor; dry.shapeWidth = gestureWidth; dry.shapeAlpha = 255
-                dry.shapePreview = explicitShape(path.first(), path.last(), gestureShape).points
+                dry.shapePreview = shapeForPath(path, gestureShape).points
             } else if (gestureTool != InkTool.Eraser) {
                 wetId = wet.startStroke(event, pointerId, inkBrush(brushName(gestureTool), gestureColor, gestureWidth * pageWidth))
             }
@@ -522,7 +522,7 @@ private class InkSurface(
                 else if (gestureTool == InkTool.Eraser) eraseLive()
                 else if (gestureTool == InkTool.Lasso) {
                     if (selectionStart != null) previewSelection(path.last()) else dry.transient = path.toList()
-                } else if (gestureTool == InkTool.Shape) dry.shapePreview = explicitShape(path.first(), path.last(), gestureShape).points
+                } else if (gestureTool == InkTool.Shape) dry.shapePreview = shapeForPath(path, gestureShape).points
                 else if (heldSnapped) dry.shapePreview = recognizeShape(path)?.points.orEmpty()
                 removeCallbacks(hold); postDelayed(hold, 500)
                 return true
@@ -572,7 +572,7 @@ private class InkSurface(
                 var points = path.toList()
                 var shape: InkShape? = null
                 if (gestureTool == InkTool.Shape) {
-                    val recognized = explicitShape(points.first(), points.last(), gestureShape)
+                    val recognized = shapeForPath(points, gestureShape)
                     points = recognized.points; shape = InkShape(recognized.type)
                 } else if (heldSnapped) {
                     recognizeShape(points)?.let { points = it.points; shape = InkShape(it.type) }

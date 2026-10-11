@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import type { Job, Paper } from '@fractal/shared';
 import { jobLabel, primaryAction, primaryLabel } from './job';
 import { t, useLanguage, type MessageKey } from '../i18n';
+import { parsePageNumber } from './page-navigation';
 import { Selector } from '../components/Selector';
 import { TRANSLATION_LANGUAGES } from '../shell/preferences';
 
@@ -83,6 +84,15 @@ export function ReaderBar(props: ReaderBarProps): JSX.Element {
   const ko = useLanguage() === 'ko';
   const { paper, job, currentPage, pageCount, zoom, viewMode, narrow, chat } = props;
   const [menuOpen, setMenuOpen, menuRef] = usePopover();
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
+  const editingPage = useRef(false);
+  const commitPage = () => {
+    if (!editingPage.current) return;
+    editingPage.current = false;
+    const page = parsePageNumber(pageDraft ?? '', pageCount);
+    setPageDraft(null);
+    if (page !== null) props.onPage(page);
+  };
   const longDocument = pageCount > 300;
   const action = primaryAction(job);
   // After section translations, the primary button widens the job to the whole book.
@@ -139,7 +149,35 @@ export function ReaderBar(props: ReaderBarProps): JSX.Element {
             ‹
           </button>
           <span className="reader-bar__readout" data-testid="page">
-            {currentPage} / {pageCount || '–'}
+            <input
+              className="reader-bar__page-input"
+              type="text"
+              inputMode="numeric"
+              aria-label={t('reader.pageNumber')}
+              disabled={pageCount < 1}
+              value={pageDraft ?? String(currentPage)}
+              onFocus={(event) => {
+                editingPage.current = true;
+                setPageDraft(String(currentPage));
+                event.currentTarget.select();
+              }}
+              onChange={(event) => setPageDraft(event.target.value)}
+              onBlur={commitPage}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitPage();
+                  event.currentTarget.blur();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  editingPage.current = false;
+                  setPageDraft(null);
+                  event.currentTarget.blur();
+                }
+              }}
+            />{' '}
+            / {pageCount || '–'}
           </span>
           <button
             type="button"

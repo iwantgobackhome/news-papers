@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 — 2026-10-11
+
+Android shapes gain an Auto mode (the new default) that turns rough rectangles, circles, triangles, arrows and lines into clean shapes, and the shape menu opens when the tool is chosen; desktop and Android readers get a draggable page scrollbar and a page number you can type to jump. Android versionCode 16. See [release notes](docs/releases/0.5.4.md).
+
 ## 0.5.3 — 2026-10-08
 
 Android pinch zoom and scrolling no longer relayout every frame or wait on page renders; ink, highlights and notes are local-first and sync on open, leave, background, Sync now and every 15 minutes; the desktop Hub keeps a stable port so paired phones survive restarts; Settings shows the real version and the library uses the News Papers mark. Android versionCode 15. See [release notes](docs/releases/0.5.3.md).

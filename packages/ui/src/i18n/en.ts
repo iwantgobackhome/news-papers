@@ -255,6 +255,7 @@ export const en: Messages = {
     leaderTranslation: 'Following the translation',
     toolbar: 'Reading tools',
     pages: 'Pages',
+    pageNumber: 'Page number to jump to',
     prevPage: 'Previous page',
     nextPage: 'Next page',
     zoom: 'Zoom',

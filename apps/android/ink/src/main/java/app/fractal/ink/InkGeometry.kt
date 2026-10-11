@@ -123,7 +123,7 @@ fun explicitShape(start: InkPoint, end: InkPoint, mode: ShapeMode): RecognizedSh
     val top = min(start.y, end.y); val bottom = max(start.y, end.y)
     fun point(x: Float, y: Float) = start.copy(x = x, y = y)
     val points = when (mode) {
-        ShapeMode.Line -> listOf(start, end)
+        ShapeMode.Auto, ShapeMode.Line -> listOf(start, end)
         ShapeMode.Arrow -> {
             val dx = end.x-start.x; val dy = end.y-start.y
             val length = hypot(dx,dy).coerceAtLeast(.0001f); val back = min(.025f,length*.25f)
@@ -133,7 +133,7 @@ fun explicitShape(start: InkPoint, end: InkPoint, mode: ShapeMode): RecognizedSh
         ShapeMode.Rectangle -> listOf(point(left,top),point(right,top),point(right,bottom),point(left,bottom),point(left,top))
         ShapeMode.Ellipse -> (0..48).map { i -> val angle = 2*PI*i/48; point((left+right)/2+cos(angle).toFloat()*(right-left)/2,(top+bottom)/2+sin(angle).toFloat()*(bottom-top)/2) }
     }
-    return RecognizedShape(mode.name.lowercase(), points, 1f)
+    return RecognizedShape((if (mode == ShapeMode.Auto) ShapeMode.Line else mode).name.lowercase(), points, 1f)
 }
 
 fun straightenHighlighter(points: List<InkPoint>): List<InkPoint> {
@@ -181,3 +181,8 @@ fun eraseStrokesOnPage(strokes: List<InkStroke>, path: List<InkPoint>, width: Fl
         }
     }
 }
+
+/** Shared live preview and commit geometry; Auto follows the complete gesture. */
+fun shapeForPath(points: List<InkPoint>, mode: ShapeMode): RecognizedShape =
+    (if (mode == ShapeMode.Auto) recognizeShape(points) else null)
+        ?: explicitShape(points.first(), points.last(), mode)

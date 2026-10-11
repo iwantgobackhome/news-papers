@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -20,7 +21,8 @@ private val COLORS = stringPreferencesKey("colors")
 private val WIDTHS = stringPreferencesKey("widths")
 private val ERASER = stringPreferencesKey("eraser")
 private val BUTTON = stringPreferencesKey("button_eraser")
-private val SHAPE = stringPreferencesKey("shape")
+// The legacy key stored Line even without an explicit shape choice. Reset once to Auto.
+private val SHAPE_V2 = stringPreferencesKey("shape_v2")
 private val RECENTS = stringPreferencesKey("recent_colors")
 
 /** Use once at the app level; changes are persisted through Preferences DataStore. */
@@ -36,13 +38,13 @@ fun rememberInkToolState(): InkToolState {
         state.loadWidths(initial[WIDTHS] ?: "")
         state.eraserMode = runCatching { EraserMode.valueOf(initial[ERASER] ?: "") }.getOrDefault(EraserMode.Stroke)
         state.buttonEraserMode = runCatching { EraserMode.valueOf(initial[BUTTON] ?: "") }.getOrDefault(EraserMode.Stroke)
-        state.shapeMode = runCatching { ShapeMode.valueOf(initial[SHAPE] ?: "") }.getOrDefault(ShapeMode.Line)
+        state.shapeMode = persistedShapeMode(initial)
         state.recentColors = initial[RECENTS]?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
         snapshotFlow { listOf(state.active.name,state.colorsString(),state.widthsString(),state.eraserMode.name,state.buttonEraserMode.name,state.shapeMode.name,state.recentColors.joinToString(",")) }
             .distinctUntilChanged().collect { values ->
                 context.inkStore.edit { prefs ->
                     prefs[TOOL] = values[0]; prefs[COLORS] = values[1]; prefs[WIDTHS] = values[2]
-                    prefs[ERASER] = values[3]; prefs[BUTTON] = values[4]; prefs[SHAPE] = values[5]; prefs[RECENTS] = values[6]
+                    prefs[ERASER] = values[3]; prefs[BUTTON] = values[4]; prefs[SHAPE_V2] = values[5]; prefs[RECENTS] = values[6]
                 }
             }
     }
@@ -51,3 +53,6 @@ fun rememberInkToolState(): InkToolState {
 
 internal fun migratedInkTool(value: String?): InkTool =
     runCatching { InkTool.valueOf(value ?: "") }.getOrDefault(InkTool.Ballpoint)
+
+internal fun persistedShapeMode(preferences: Preferences): ShapeMode =
+    runCatching { ShapeMode.valueOf(preferences[SHAPE_V2] ?: "") }.getOrDefault(ShapeMode.Auto)

@@ -85,6 +85,12 @@ private fun shapeLabel(shape: ShapeMode): Int = when (shape) {
     ShapeMode.Arrow -> R.string.shape_arrow
     ShapeMode.Rectangle -> R.string.shape_rectangle
     ShapeMode.Ellipse -> R.string.shape_ellipse
+    ShapeMode.Star -> R.string.shape_star
+    ShapeMode.Hexagon -> R.string.shape_hexagon
+    ShapeMode.Pentagon -> R.string.shape_pentagon
+    ShapeMode.Diamond -> R.string.shape_diamond
+    ShapeMode.Triangle -> R.string.shape_triangle
+    ShapeMode.DoubleArrow -> R.string.shape_double_arrow
 }
 private fun icon(name: InkTool, shape: ShapeMode): ImageVector = ImageVector.Builder(name = name.name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
     path(fill = null, stroke = androidx.compose.ui.graphics.SolidColor(Color.Black), strokeLineWidth = 1.7f, strokeLineCap = StrokeCap.Round) {
@@ -98,6 +104,18 @@ private fun icon(name: InkTool, shape: ShapeMode): ImageVector = ImageVector.Bui
                 ShapeMode.Auto -> { moveTo(3f,19f); lineTo(12f,5f); lineTo(21f,19f); close(); moveTo(18f,3f); lineTo(18f,9f); moveTo(15f,6f); lineTo(21f,6f) }
                 ShapeMode.Line -> { moveTo(4f,20f); lineTo(20f,4f) }
                 ShapeMode.Arrow -> { moveTo(4f,20f); lineTo(20f,4f); lineTo(12f,4f); moveTo(20f,4f); lineTo(20f,12f) }
+                ShapeMode.DoubleArrow -> { moveTo(4f,20f); lineTo(20f,4f); lineTo(12f,4f); moveTo(20f,4f); lineTo(20f,12f); moveTo(4f,12f); lineTo(4f,20f); lineTo(12f,20f) }
+                ShapeMode.Triangle, ShapeMode.Diamond, ShapeMode.Pentagon, ShapeMode.Hexagon, ShapeMode.Star -> {
+                    val n = when (shape) { ShapeMode.Triangle -> 3; ShapeMode.Diamond -> 4; ShapeMode.Pentagon -> 5; ShapeMode.Hexagon -> 6; else -> 10 }
+                    for (i in 0 until n) {
+                        val angle = -kotlin.math.PI / 2 + 2 * kotlin.math.PI * i / n
+                        val r = if (shape == ShapeMode.Star && i % 2 == 1) 4f else 9f
+                        val x = 12f + kotlin.math.cos(angle).toFloat() * r
+                        val y = 12f + kotlin.math.sin(angle).toFloat() * r
+                        if (i == 0) moveTo(x,y) else lineTo(x,y)
+                    }
+                    close()
+                }
                 ShapeMode.Rectangle -> { moveTo(4f,5f); lineTo(20f,5f); lineTo(20f,19f); lineTo(4f,19f); close() }
                 ShapeMode.Ellipse -> { moveTo(20f,12f); curveTo(20f,2f,4f,2f,4f,12f); curveTo(4f,22f,20f,22f,20f,12f); close() }
             }

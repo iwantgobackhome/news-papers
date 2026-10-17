@@ -16,9 +16,9 @@ class AutoShapeTest {
    p((.5+cos(a)*r).toFloat(),(.5+sin(a)*r).toFloat()) }
   assertEquals(shapeForPath(path,ShapeMode.Auto).type,"ellipse")
  }
- @Test fun nearStraightStrokeAndFallbackBecomeLine() {
+ @Test fun nearStraightStrokeAndFallbackStaysRaw() {
   assertEquals(shapeForPath((0..20).map { p(.1f+it*.02f,.3f+sin(it.toFloat())*.002f) },ShapeMode.Auto).type,"line")
-  assertEquals(shapeForPath(listOf(p(.1f,.1f),p(.2f,.3f)),ShapeMode.Auto).type,"line")
+  assertEquals(shapeForPath(listOf(p(.1f,.1f),p(.2f,.3f)),ShapeMode.Auto).type,"freehand")
   assertEquals(InkToolState().shapeMode,ShapeMode.Auto)
  }
  @Test fun explicitRectangleStillUsesCorners() {

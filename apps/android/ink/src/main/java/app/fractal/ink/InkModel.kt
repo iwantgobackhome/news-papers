@@ -193,7 +193,7 @@ private fun InkStroke.edited(
 
 enum class InkTool { Ballpoint, Fountain, Pencil, Highlighter, Eraser, Shape, Lasso }
 enum class EraserMode { Stroke, Partial }
-enum class ShapeMode { Auto, Line, Arrow, Rectangle, Ellipse }
+enum class ShapeMode { Auto, Line, Arrow, DoubleArrow, Rectangle, Ellipse, Triangle, Diamond, Pentagon, Hexagon, Star }
 class InkToolState {
     var active by mutableStateOf(InkTool.Ballpoint)
     private val colors = mutableStateMapOf<InkTool,String>()

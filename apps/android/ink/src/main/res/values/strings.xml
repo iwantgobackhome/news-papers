@@ -38,4 +38,10 @@
     <string name="tool_region">Region</string>
     <string name="width_value">Size %1$s</string>
     <string name="shape_auto">Auto</string>
+    <string name="shape_double_arrow">Double arrow</string>
+    <string name="shape_triangle">Triangle</string>
+    <string name="shape_diamond">Diamond</string>
+    <string name="shape_pentagon">Pentagon</string>
+    <string name="shape_hexagon">Hexagon</string>
+    <string name="shape_star">Star</string>
 </resources>

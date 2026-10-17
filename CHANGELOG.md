@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5 — 2026-10-17
+
+Android Auto shapes draw the raw stroke while the pen moves and snap on lift (or stay freehand), recognizing many more shapes including triangles, diamonds, polygons, stars, double arrows and rotated rectangles and ellipses; queued phone changes are combined per item and one sync drains the whole queue instead of a few per tap. Android versionCode 17. See [release notes](docs/releases/0.5.5.md).
+
 ## 0.5.4 — 2026-10-11
 
 Android shapes gain an Auto mode (the new default) that turns rough rectangles, circles, triangles, arrows and lines into clean shapes, and the shape menu opens when the tool is chosen; desktop and Android readers get a draggable page scrollbar and a page number you can type to jump. Android versionCode 16. See [release notes](docs/releases/0.5.4.md).

@@ -71,8 +71,6 @@ internal fun ScholarlyLibraryScreen(app: ReaderApplication, onSettings: () -> Un
         syncing = true
         runCatching {
             app.sync.syncOnce()
-            // Drain dependent edits after creation/CAS rebases, without an unbounded retry loop.
-            repeat(8) { if (app.database.metadata().pending().isNotEmpty()) app.sync.syncOnce() }
             app.sync.resolveMissingPdfs()
         }.onSuccess { error = "" }.onFailure { error = hubErrorMessage(it, connectionHint) }
         syncing = false

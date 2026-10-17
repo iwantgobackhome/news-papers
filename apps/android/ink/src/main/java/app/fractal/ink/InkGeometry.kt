@@ -93,68 +93,77 @@ private fun shapeSamples(points: List<InkPoint>): List<InkPoint> {
  * polygons must have sustained straight edges and distinct corners. */
 fun recognizeShape(points: List<InkPoint>): RecognizedShape? {
     if (points.size < 4) return null
-    val q = shapeSamples(points)
+    var q = shapeSamples(points)
     val diagonal = hypot(q.maxOf { it.x }-q.minOf { it.x }, q.maxOf { it.y }-q.minOf { it.y })
     if (diagonal < .015f) return null
     val length = q.zipWithNext().sumOf { (a,b) -> distance(a,b).toDouble() }.toFloat()
-    val closed = distance(q.first(),q.last()) < diagonal*.20f && length > diagonal*1.8f
+    val closed = distance(q.first(),q.last()) < diagonal*.25f && length > diagonal*1.8f
     fun result(type: String, vertices: List<InkPoint>, error: Float) = RecognizedShape(type,vertices,1-error)
     run {
         val lineError = q.maxOf { segmentDistance(it,q.first(),q.last()) }/diagonal
-        if (!closed && lineError < .045f && length < distance(q.first(),q.last())*1.12f) {
+        if (!closed && lineError < .065f && length < distance(q.first(),q.last())*1.12f) {
             var a=q.first(); var b=q.last()
             if (abs(a.x-b.x)<diagonal*.065f) { val x=(a.x+b.x)/2; a=a.copy(x=x); b=b.copy(x=x) }
             if (abs(a.y-b.y)<diagonal*.065f) { val y=(a.y+b.y)/2; a=a.copy(y=y); b=b.copy(y=y) }
             return result("line",listOf(a,b),lineError)
         }
-        val vertices = simplify(q,diagonal*.025f)
+        val vertices = simplify(q,diagonal*.035f)
         // Arrow strokes revisit a tip after each wing. Require a long shaft and
         // wings pointing backwards on opposite sides of that shaft.
-        val shaft = vertices.zipWithNext().maxByOrNull { (a,b) -> distance(a,b) }
-        if (vertices.size in 4..10 && length < diagonal*3.2f && shaft != null && distance(shaft.first,shaft.second)>diagonal*.55f) {
+        // Wobble can split a long shaft into several simplified segments.
+        // Search bounded endpoints, rather than mistaking the longest fragment for it.
+        val shaft = if(vertices.size<=16) vertices.indices.flatMap { i ->
+            (i+1 until vertices.size).map { j -> vertices[i] to vertices[j] }
+        }.maxByOrNull { (a,b) -> distance(a,b) } else null
+        if (vertices.size in 4..16 && length < diagonal*3.2f && shaft != null && distance(shaft.first,shaft.second)>diagonal*.55f) {
             val (a,b)=shaft; val dx=b.x-a.x; val dy=b.y-a.y; val d=hypot(dx,dy)
             fun hasHead(tip: InkPoint, direction: Float): Boolean {
                 val wings=vertices.filter { p ->
                     val along=((p.x-tip.x)*dx+(p.y-tip.y)*dy)/d*direction
                     val across=abs((p.x-tip.x)*dy-(p.y-tip.y)*dx)/d
-                    along in (-d*.48f)..(-d*.06f) && across in (d*.035f)..(d*.35f)
+                    along in (-d*.48f)..(-d*.06f) && across in (d*.025f)..(d*.35f)
                 }
-                return wings.any { ((it.x-tip.x)*dy-(it.y-tip.y)*dx)>0 } &&
+                val retracedWing=(1 until vertices.lastIndex).any { i ->
+                    val wing=vertices[i];val before=vertices[i-1];val after=vertices[i+1]
+                    val cosine=((before.x-wing.x)*(after.x-wing.x)+(before.y-wing.y)*(after.y-wing.y))/
+                        (distance(before,wing)*distance(after,wing)).coerceAtLeast(.000001f)
+                    wing in wings && cosine>.85f && distance(before,tip)<diagonal*.15f && distance(after,tip)<diagonal*.15f
+                }
+                return retracedWing && wings.any { ((it.x-tip.x)*dy-(it.y-tip.y)*dx)>0 } &&
                     wings.any { ((it.x-tip.x)*dy-(it.y-tip.y)*dx)<0 } &&
-                    vertices.count { distance(it,tip)<diagonal*.09f }>=2
+                    vertices.count { distance(it,tip)<diagonal*.13f }>=2
             }
             val endHead=hasHead(b,1f); val startHead=hasHead(a,-1f)
             if (endHead || startHead) return explicitShape(if(endHead)a else b,if(endHead)b else a,
                 if(endHead && startHead) ShapeMode.DoubleArrow else ShapeMode.Arrow).copy(confidence=.9f)
         }
-        if (!closed && !selfIntersects(vertices, false) && vertices.size in 3..9 && length < diagonal*3.5f && polygonEdgesAreStraight(q,vertices,diagonal,false))
+        if (!closed && !selfIntersects(vertices, false) && curvatureCorners(q,false).size == vertices.size-2 && vertices.size in 3..9 && length < diagonal*3.5f && polygonEdgesAreStraight(q,vertices,diagonal,false))
             return result("polyline",vertices,.05f)
         if (!closed) return null
     }
-    // Rotate the closed seam to an extreme point so a mid-edge pen-down does
-    // not introduce a spurious corner. The final collinear seam is removed.
-    val seam=q.indices.minBy { q[it].x+q[it].y*.173f }
-    val ring=q.drop(seam)+q.take(seam)
-    var vertices=simplify(ring+ring.first(),diagonal*.035f).dropLast(1).toMutableList()
-    var changed=true
-    while(changed && vertices.size>3) {
-        changed=false
-        for(i in vertices.indices) {
-            if(segmentDistance(vertices[i],vertices[(i+vertices.size-1)%vertices.size],vertices[(i+1)%vertices.size])<diagonal*.035f) {
-                vertices.removeAt(i); changed=true; break
-            }
-        }
+    // Remove a short overlap past the starting point before making the ring.
+    // Gaps are bridged; an overlap must pass substantially closer than its end.
+    val closure=(q.size*3/4 until q.size).minBy { distance(q[it],q.first()) }
+    if(closure<q.lastIndex-2 && distance(q[closure],q.first())<diagonal*.07f &&
+        distance(q[closure],q.first())<distance(q.last(),q.first())*.65f) q=q.take(closure+1)
+    q=shapeSamples(q+q.first()).dropLast(1)
+    val smoothed=q.indices.map { i ->
+        val neighbors=(-1..1).map{q[(i+it+q.size)%q.size]}
+        q[i].copy(x=neighbors.map{it.x}.average().toFloat(),y=neighbors.map{it.y}.average().toFloat())
     }
-    if(vertices.size in 3..12 && polygonEdgesAreStraight(q,vertices,diagonal,true)) {
+    val cornerIndices=curvatureCorners(smoothed,true)
+    var vertices=(fittedPolygon(smoothed,cornerIndices) ?: emptyList()).toMutableList()
+    val polygonCandidate = run {
+        if(vertices.size !in 3..12 || !polygonEdgesAreStraight(q,vertices,diagonal,true)) return@run null
         val edges=vertices.indices.map { i -> distance(vertices[i],vertices[(i+1)%vertices.size]) }
-        if(edges.min()<diagonal*.10f) return null
+        if(edges.min()<diagonal*.075f) return@run null
         val cross=vertices.indices.map { i ->
             val a=vertices[i];val b=vertices[(i+1)%vertices.size];val c=vertices[(i+2)%vertices.size]
             (b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x)
         }
         var type=when(vertices.size) {3->"triangle";4->"quadrilateral";5->"pentagon";6->"hexagon";else->"polygon"}
         if(vertices.size==10 && cross.zipWithNext().all { (a,b)->a*b<0 }) type="star"
-        else if(selfIntersects(vertices,true)) return null
+        else if(selfIntersects(vertices,true)) return@run null
         if(vertices.size==3) {
             val equal=edges.max()/edges.min()<1.15f
             if(equal) {
@@ -180,9 +189,9 @@ fun recognizeShape(points: List<InkPoint>): RecognizedShape? {
         if(vertices.size==4) {
             val right=vertices.indices.all { i ->
                 val a=vertices[i];val b=vertices[(i+1)%4];val c=vertices[(i+2)%4]
-                abs((a.x-b.x)*(c.x-b.x)+(a.y-b.y)*(c.y-b.y))/(edges[i]*edges[(i+1)%4])<.20f
+                abs((a.x-b.x)*(c.x-b.x)+(a.y-b.y)*(c.y-b.y))/(edges[i]*edges[(i+1)%4])<.30f
             }
-            val equal=edges.max()/edges.min()<1.18f
+            val equal=edges.max()/edges.min()<1.28f
             if(right) {
                 type="rectangle"
                 // Orthogonal edge frame preserves rotation, regularizes near squares.
@@ -196,7 +205,8 @@ fun recognizeShape(points: List<InkPoint>): RecognizedShape? {
                 }.toMutableList()
             } else if(equal) type="diamond"
         }
-        return result(type,vertices+vertices.first(),.04f)
+        val error=q.map { point -> vertices.indices.minOf { i -> segmentDistance(point,vertices[i],vertices[(i+1)%vertices.size]) } }.average().toFloat()/diagonal
+        result(type,vertices+vertices.first(),error)
     }
     // PCA supplies the ellipse orientation. Extents in that frame avoid the
     // perimeter sampling bias of using covariance eigenvalues as radii.
@@ -207,14 +217,72 @@ fun recognizeShape(points: List<InkPoint>): RecognizedShape? {
     val local=q.map { (it.x-cx)*ux+(it.y-cy)*uy to -(it.x-cx)*uy+(it.y-cy)*ux }
     val mx=(local.maxOf{it.first}+local.minOf{it.first})/2;val my=(local.maxOf{it.second}+local.minOf{it.second})/2
     var rx=(local.maxOf{it.first}-local.minOf{it.first})/2;var ry=(local.maxOf{it.second}-local.minOf{it.second})/2
-    if(min(rx,ry)<diagonal*.10f) return null
+    if(min(rx,ry)<diagonal*.10f) return polygonCandidate
     val error=local.map { abs(hypot((it.first-mx)/rx,(it.second-my)/ry)-1f) }.average().toFloat()
-    if(error>.065f || length>2*PI*max(rx,ry)*1.15) return null
+    if(error>.105f || length>2*PI*max(rx,ry)*1.15) return polygonCandidate
     if(max(rx,ry)/min(rx,ry)<1.12f) {val r=(rx+ry)/2;rx=r;ry=r}
-    return result("ellipse",(0..64).map { i ->
+    val ellipse=result("ellipse",(0..64).map { i ->
         val t=2*PI*i/64;val x=mx+cos(t).toFloat()*rx;val y=my+sin(t).toFloat()*ry
         q.first().copy(x=cx+x*ux-y*uy,y=cy+x*uy+y*ux)
     },error)
+    val ellipseSegments=ellipse.points.zipWithNext()
+    val ellipseDistance=q.map { point -> ellipseSegments.minOf { (a,b) -> segmentDistance(point,a,b) } }.average().toFloat()/diagonal
+    // Compare geometric residuals in the same units. A small complexity cost
+    // avoids inventing polygon corners on a slightly flat or wobbly ellipse.
+    val polygon=polygonCandidate
+    return if(polygon != null && 1-polygon.confidence+.0015f*(polygon.points.size-1) < ellipseDistance+.003f) polygon else ellipse
+}
+
+/** Smoothed curvature uses a fixed arc-length window, so slow corner events
+ * cannot outweigh fast edges. Nonmaximum suppression returns one peak per turn. */
+private fun curvatureCorners(q: List<InkPoint>, closed: Boolean): List<Int> {
+    val n=q.size
+    val window=5
+    fun at(i:Int)=q[if(closed) (i%n+n)%n else i.coerceIn(0,n-1)]
+    val turns=FloatArray(n) { i ->
+        if(!closed && (i<window || i>=n-window)) 0f else {
+            val a=at(i-window);val b=at(i);val c=at(i+window)
+            abs(atan2((b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x),
+                (b.x-a.x)*(c.x-b.x)+(b.y-a.y)*(c.y-b.y)))
+        }
+    }
+    val peaks=mutableListOf<Int>()
+    for(i in turns.indices.sortedByDescending{turns[it]}) {
+        if(turns[i]<.48f) break
+        if(peaks.none { j -> val d=abs(i-j);min(d,if(closed)n-d else d)<10 }) peaks.add(i)
+    }
+    return peaks.sorted()
+}
+
+private data class ShapeEdge(val x:Float,val y:Float,val ux:Float,val uy:Float)
+
+private fun fittedEdge(q: List<InkPoint>): ShapeEdge {
+    val x=q.map{it.x}.average().toFloat();val y=q.map{it.y}.average().toFloat()
+    var xx=0f;var xy=0f;var yy=0f
+    for(p in q) {val dx=p.x-x;val dy=p.y-y;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy}
+    val angle=.5f*atan2(2*xy,xx-yy)
+    return ShapeEdge(x,y,cos(angle),sin(angle))
+}
+
+/** Fit the interiors of edges, then intersect lines to reconstruct corners
+ * removed by a rounded turn. This also averages wobble instead of freezing it
+ * into the snapped vertices. */
+private fun fittedPolygon(q:List<InkPoint>, corners:List<Int>): List<InkPoint>? {
+    val n=q.size
+    if(corners.size !in 3..12) return null
+    val edges=corners.indices.map { i ->
+        val start=corners[i];val end=if(i==corners.lastIndex)corners[0]+n else corners[i+1]
+        val trim=max(2,(end-start)/6)
+        if(end-start<8) return null
+        fittedEdge((start+trim..end-trim).map{q[it%n]})
+    }
+    return corners.indices.map { i ->
+        val a=edges[(i+edges.size-1)%edges.size];val b=edges[i]
+        val det=a.ux*b.uy-a.uy*b.ux
+        if(abs(det)<.15f) return null
+        val t=((b.x-a.x)*b.uy-(b.y-a.y)*b.ux)/det
+        q[corners[i]].copy(x=a.x+t*a.ux,y=a.y+t*a.uy)
+    }
 }
 
 private fun selfIntersects(v: List<InkPoint>, closed: Boolean): Boolean {
@@ -232,12 +300,12 @@ private fun polygonEdgesAreStraight(samples: List<InkPoint>, vertices: List<InkP
     val count=if(closed) vertices.size else vertices.size-1
     if(count<2) return false
     val errors=samples.map { p -> (0 until count).minOf { i -> segmentDistance(p,vertices[i],vertices[(i+1)%vertices.size]) }/diagonal }
-    if(errors.average()>.012 || errors.max()>.045f) return false
+    if(errors.average()>.028 || errors.max()>.085f) return false
     // Curves simplified into many small chords are not intentional corners.
     return (if(closed) vertices.indices else 1 until vertices.lastIndex).all { i ->
         val a=vertices[(i+vertices.size-1)%vertices.size];val b=vertices[i];val c=vertices[(i+1)%vertices.size]
         val cosine=((a.x-b.x)*(c.x-b.x)+(a.y-b.y)*(c.y-b.y))/(distance(a,b)*distance(b,c)).coerceAtLeast(.000001f)
-        cosine>-.86f
+        cosine>-.94f
     }
 }
 

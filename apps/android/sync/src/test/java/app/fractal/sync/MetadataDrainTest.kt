@@ -98,7 +98,7 @@ class MetadataDrainTest {
         assertEquals(hub.records["p1"]!!["readProgress"]!!.jsonObject.text("page"), "30")
     }
 
-    @Test fun mergedConflictReplacesWholeGroupAndStopsWithoutProgress() = runBlocking {
+    @Test fun mergedConflictReplacesWholeGroupAndStopsAtPassBound() = runBlocking {
         val store = Store()
         store.queue += mutation(1, patch = """{"tags":["keep","add"]}""", base = """{"rev":0,"tags":["old","keep"]}""")
         store.queue += mutation(2, patch = """{"tags":["keep"]}""", base = """{"rev":0,"tags":["keep","add"]}""")
@@ -108,7 +108,7 @@ class MetadataDrainTest {
         }
         SyncEngine(store.database, hub).syncOnce()
         assertEquals(store.queue.size, 1)
-        assertEquals(hub.conflicts, 2)
+        assertEquals(hub.conflicts, 10)
         assertEquals(json(store.queue.single().patchJson)["tags"], json("""{"tags":["keep","remote"]}""")["tags"])
         assertFalse(store.queue.single().requestId in listOf("request-1", "request-2"))
     }

@@ -178,6 +178,7 @@ class SyncEngine(private val database: FractalDatabase, private val client: HubD
             val groups = database.metadata().pending().groupBy { it.kind to it.entityId }
             val pending = groups.values.map(::coalesceMetadataMutations)
             val countBefore = groups.values.sumOf { it.size }
+            var rebasedThisPass = false
             if (dirty.isEmpty() && pending.isEmpty()) break
             pushed += dirty.size + pending.size
             val folders = mutableListOf<MetadataMutation>()
@@ -266,6 +267,7 @@ class SyncEngine(private val database: FractalDatabase, private val client: HubD
                                 ?.takeIf { it.rev > current.revision() }?.let { WireJson.format.parseToJsonElement(it.json).jsonObject } ?: current
                             val rebased = MetadataMerge.rebase(latest, intent)
                             for (mutation in live) database.metadata().acknowledge(mutation.requestId)
+                            rebasedThisPass = true
                             database.metadata().enqueue(intent.copy(requestId = UUID.randomUUID().toString(),
                                 baseRev = latest.revision(), baseJson = latest.toString(), patchJson = rebased.toString()))
                             project(sent.kind, sent.entityId, current)
@@ -275,8 +277,9 @@ class SyncEngine(private val database: FractalDatabase, private val client: HubD
                     projectFolderDeletions()
                 }
             }
-            // Retry only while rows are being removed; incompatible hubs and repeated conflicts stop here.
-            if (database.metadata().pending().size >= countBefore) break
+            // Retry while rows are removed or a conflict was rebased onto the Hub's current revision;
+            // incompatible hubs stop here, and the pass bound caps repeated conflicts.
+            if (database.metadata().pending().size >= countBefore && !rebasedThisPass) break
         }
         papers.size + annotations.size + pushed
     }

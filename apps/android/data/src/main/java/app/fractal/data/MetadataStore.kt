@@ -50,6 +50,16 @@ object MetadataMerge {
     }
 }
 
+/** Collapse absolute field intent while retaining the earliest unacknowledged server base. */
+fun coalesceMetadataMutations(rows: List<MetadataMutation>): MetadataMutation {
+    require(rows.isNotEmpty())
+    val ordered = rows.sortedWith(compareBy<MetadataMutation> { it.createdAt }.thenBy { it.requestId })
+    val patch = linkedMapOf<String, JsonElement>()
+    for (row in ordered) patch.putAll(WireJson.format.parseToJsonElement(row.patchJson).jsonObject)
+    return ordered.first().copy(requestId = ordered.last().requestId,
+        patchJson = JsonObject(patch).toString(), deviceId = ordered.last().deviceId)
+}
+
 fun libraryEntity(value: JsonObject, previous: LibraryEntity?, dirty: Boolean): LibraryEntity {
     val record = WireJson.format.decodeFromString<LibraryRecord>(value.toString())
     return LibraryEntity(record.paperKey, record.title, record.authors.joinToString(", ") {
@@ -68,8 +78,12 @@ class MetadataStore(private val database: FractalDatabase, private val deviceId:
     private suspend fun enqueue(kind: String, id: String, base: JsonObject, patch: JsonObject) {
         val pending = database.metadata().pending()
         val sequence = maxOf(System.currentTimeMillis(), (pending.maxOfOrNull { it.createdAt } ?: 0) + 1)
-        database.metadata().enqueue(MetadataMutation(UUID.randomUUID().toString(), kind, id,
-            base.revision(), base.toString(), patch.toString(), deviceId(), sequence))
+        val existing = pending.filter { it.kind == kind && it.entityId == id }
+        val fresh = MetadataMutation(UUID.randomUUID().toString(), kind, id,
+            base.revision(), base.toString(), patch.toString(), deviceId(), sequence)
+        val merged = coalesceMetadataMutations(existing + fresh)
+        for (row in existing) database.metadata().acknowledge(row.requestId)
+        database.metadata().enqueue(merged)
     }
 
     suspend fun patchPaper(key: String, patch: JsonObject) = database.withTransaction {

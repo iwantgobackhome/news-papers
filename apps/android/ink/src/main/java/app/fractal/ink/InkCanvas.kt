@@ -493,7 +493,9 @@ private class InkSurface(
                 if (selectionStart != null) dry.preview = state.selection()
             } else if (gestureTool == InkTool.Shape) {
                 dry.shapeColor = gestureColor; dry.shapeWidth = gestureWidth; dry.shapeAlpha = 255
-                dry.shapePreview = shapeForPath(path, gestureShape).points
+                if (gestureShape == ShapeMode.Auto) {
+                    wetId = wet.startStroke(event, pointerId, inkBrush(brushName(gestureTool), gestureColor, gestureWidth * pageWidth))
+                } else dry.shapePreview = shapePreviewForPath(path, gestureShape)
             } else if (gestureTool != InkTool.Eraser) {
                 wetId = wet.startStroke(event, pointerId, inkBrush(brushName(gestureTool), gestureColor, gestureWidth * pageWidth))
             }
@@ -522,7 +524,7 @@ private class InkSurface(
                 else if (gestureTool == InkTool.Eraser) eraseLive()
                 else if (gestureTool == InkTool.Lasso) {
                     if (selectionStart != null) previewSelection(path.last()) else dry.transient = path.toList()
-                } else if (gestureTool == InkTool.Shape) dry.shapePreview = shapeForPath(path, gestureShape).points
+                } else if (gestureTool == InkTool.Shape) dry.shapePreview = shapePreviewForPath(path, gestureShape)
                 else if (heldSnapped) dry.shapePreview = recognizeShape(path)?.points.orEmpty()
                 removeCallbacks(hold); postDelayed(hold, 500)
                 return true
@@ -573,7 +575,7 @@ private class InkSurface(
                 var shape: InkShape? = null
                 if (gestureTool == InkTool.Shape) {
                     val recognized = shapeForPath(points, gestureShape)
-                    points = recognized.points; shape = InkShape(recognized.type)
+                    points = recognized.points; shape = if (recognized.type == "freehand") null else InkShape(recognized.type)
                 } else if (heldSnapped) {
                     recognizeShape(points)?.let { points = it.points; shape = InkShape(it.type) }
                 }

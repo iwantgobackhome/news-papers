@@ -38,4 +38,10 @@
     <string name="tool_region">영역</string>
     <string name="width_value">크기 %1$s</string>
     <string name="shape_auto">자동</string>
+    <string name="shape_double_arrow">양방향 화살표</string>
+    <string name="shape_triangle">삼각형</string>
+    <string name="shape_diamond">마름모</string>
+    <string name="shape_pentagon">오각형</string>
+    <string name="shape_hexagon">육각형</string>
+    <string name="shape_star">별</string>
 </resources>

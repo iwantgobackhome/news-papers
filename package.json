@@ -31,7 +31,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.5",
-    "electron": "44.4.5",
+    "electron": "44.9.1",
     "electron-builder": "26.15.3",
     "esbuild": "^0.25.0",
     "playwright-core": "^1.63.0",
